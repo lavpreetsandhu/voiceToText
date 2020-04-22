@@ -12,15 +12,17 @@ var AudioContext = window.AudioContext || window.webkitAudioContext;
 var audioContext = new AudioContext;
 //new audio context to help us record 
 var recordButton = document.getElementById("recordButton");
-var stopButton = document.getElementById("stopButton");
-var pauseButton = document.getElementById("pauseButton");
-//add events to those 3 buttons 
-recordButton.addEventListener("click", startRecording);
-stopButton.addEventListener("click", stopRecording);
-pauseButton.addEventListener("click", pauseRecording);
-/* Simple constraints object, for more advanced audio features see
-https://addpipe.com/blog/audio-constraints-getusermedia/ */
+var outputTxtarea=document.getElementById("punjabOutputText")
+var timerSpan=document.getElementById("timerSpan")
+outputTxtarea.value=" "
+
+//global timer variable
+var i=10;
+var timer; //timer function variable 
+var stopButtonTimer; // stop time variable
+recordButton.addEventListener("click",startRecording);
 function startRecording() { console.log("recordButton clicked"); 
+
 var constraints = {
     audio: true,
     video: false
@@ -28,15 +30,17 @@ var constraints = {
 /* Disable the record button until we get a success or fail from getUserMedia() */
 
 recordButton.disabled = true;
-stopButton.disabled = false;
-pauseButton.disabled = false
-
-/* We're using the standard promise based getUserMedia()
-
-https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/getUserMedia */
 
 navigator.mediaDevices.getUserMedia(constraints).then(function(stream) {
     console.log("getUserMedia() success, stream created, initializing Recorder.js ..."); 
+    // timer function that will show time 
+    timer=setInterval(function(){
+        console.log(i)
+        i--;
+        timerSpan.textContent="Timer-"+i
+    
+    },1000) 
+    stopButtonTimer=setInterval(stopRecording,10000)
     /* assign to gumStream for later use */
     gumStream = stream;
     /* use the stream */
@@ -48,45 +52,19 @@ navigator.mediaDevices.getUserMedia(constraints).then(function(stream) {
     //start the recording process 
     rec.record()
     console.log("Recording started");
+   
 }).catch(function(err) {
     //enable the record button if getUserMedia() fails 
     recordButton.disabled = false;
-    stopButton.disabled = true;
-    pauseButton.disabled = true
 });
 }
-function pauseRecording() {
-    console.log("pauseButton clicked rec.recording=", rec.recording);
-    if (rec.recording) {
-        //pause 
-        rec.stop();
-        pauseButton.innerHTML = "Resume";
-    } else {
-        //resume 
-        rec.record()
-        pauseButton.innerHTML = "Pause";
-    }
-}
-function pauseRecording() {
-    console.log("pauseButton clicked rec.recording=", rec.recording);
-    if (rec.recording) {
-        //pause 
-        rec.stop();
-        pauseButton.innerHTML = "Resume";
-    } else {
-        //resume 
-        rec.record()
-        pauseButton.innerHTML = "Pause";
-    }
-}
 function stopRecording() {
+    clearInterval(timer)
+    clearTimeout(stopButtonTimer)
     console.log("stopButton clicked");
-    //disable the stop button, enable the record too allow for new recordings 
-    stopButton.disabled = true;
+    i=10;
+    timerSpan.textContent="Timer-10"
     recordButton.disabled = false;
-    pauseButton.disabled = true;
-    //reset button just in case the recording is stopped while paused 
-    pauseButton.innerHTML = "Pause";
     //tell the recorder to stop the recording 
     rec.stop(); //stop microphone access 
     gumStream.getAudioTracks()[0].stop();
@@ -94,6 +72,7 @@ function stopRecording() {
     rec.exportWAV(createDownloadLink);
 }
 function createDownloadLink(blob) {
+    console.log("i m called")
     var url = URL.createObjectURL(blob);
     var au = document.createElement('audio');
     var li = document.createElement('li');
@@ -105,31 +84,29 @@ function createDownloadLink(blob) {
     link.href = url;
     link.download = new Date().toISOString() + '.wav';
     link.innerHTML = link.download;
-    //add the new audio and a elements to the li element 
-    li.appendChild(au);
-    li.appendChild(link);
-    //add the li element to the ordered list 
-    var filename = new Date().toISOString();
-    //filename to send to server without extension 
-    //upload link 
+    var filename = new Date().toISOString()+'.wav';
     var upload = document.createElement('a');
     upload.href = "#";
     upload.innerHTML = "Upload";
-    upload.addEventListener("click", function(event) {
-        var xhr = new XMLHttpRequest();
-        xhr.onload = function(e) {
-            if (this.readyState === 4) {
-                console.log("Server returned: ", e.target.responseText);
-            }
+        var myHeaders = new Headers();
+        myHeaders.append("Authorization", "Token 971bbeef3f381f3bc4da5bbdeabb4abe44bc6f1b");
+        var formdata = new FormData();
+        formdata.append("language", "PB");
+        formdata.append("audio_file",blob,filename);
+        var requestOptions = {
+        method: 'POST',
+        headers: myHeaders,
+        body: formdata,
+        redirect: 'follow'
         };
-        fd.append("audio_file", blob,"abc.wav"); //orinal
-        fd.append("language","PB");
-        console.log(blob)
-        xhr.open("POST","https://dev.liv.ai/liv_transcription_api/recordings/",true);
-        xhr.setRequestHeader("Authorization","Token 971bbeef3f381f3bc4da5bbdeabb4abe44bc6f1b")
-        xhr.send(fd)      
-})
-    li.appendChild(document.createTextNode(" ")) //add a space in between 
-    li.appendChild(upload) //add the upload link to li
-    recordingsList.appendChild(li); 
+
+    fetch("https://dev.liv.ai/liv_transcription_api/recordings/", requestOptions)
+    .then(response => response.json())
+    .then(result =>setPbiTxt(result))//sending received text function
+    .catch(error => console.log('error', error));
+    const setPbiTxt=function(pbiTxtObj){
+        var punjabiOutputText=pbiTxtObj.transcriptions[0].utf_text;
+        outputTxtarea.value=outputTxtarea.value+" "+punjabiOutputText;//set text to text area 
+        
+    }
 }
